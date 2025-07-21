@@ -185,16 +185,16 @@ This document outlines the initial plan for a 3D game developed for a Databases 
   - Ensure mobile responsiveness.
 
 ## Next Steps
-- 1	Finalize Framework:
-	◦	Choose React or Next.js.
-	◦	Select PostgreSQL or MySQL.
-- 2	Prototype Authentication:
-	◦	Build and test login/register system.
-- 3	Set Up Three.js:
-	◦	Create minimal 3D scene.
-- 4	Explore Hosting:
-	◦	Test deployment on Vercel/Render.
-- 5	Plan Game Mechanics:
-	◦	Define objectives and database integration.
+- **Finalize Framework**:
+  - Choose React or Next.js.
+  - Select PostgreSQL or MySQL.
+- **Prototype Authentication**:
+  - Build and test login/register system.
+- **Set Up Three.js**:
+  - Create minimal 3D scene.
+- **Explore Hosting**:
+  - Test deployment on Vercel/Render.
+- **Plan Game Mechanics**:
+  - Define objectives and database integration.
 
 This documentation serves as a foundation for the game project. Expand on physics, mechanics, UI, and queries as development progresses.
