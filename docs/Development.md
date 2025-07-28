@@ -1,9 +1,9 @@
 # Development Log
 
 ## Setup
-- [ ] Initialize Next.js project
-- [ ] Set up PostgreSQL database
-- [ ] Configure GitHub repository
+- [x] Initialize Next.js project with TypeScript
+- [x] Set up PostgreSQL database
+- [x] Configure GitHub repository
 
 ## Authentication
 - [ ] Build login/register UI
