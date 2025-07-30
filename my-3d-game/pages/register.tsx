@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 export default function Register() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const router = useRouter();
 
   const handleRegister = async () => {
@@ -12,14 +13,15 @@ export default function Register() {
       await axios.post('/api/register', { username, password });
       alert('Registration successful! Please log in.');
       router.push('/login');
-    } catch (error) {
-      alert('Registration failed! Username may be taken.');
+    } catch (error: any) {
+      setError(error.response?.data?.error || 'Registration failed. Please try again.');
     }
   };
 
   return (
     <div style={{ textAlign: 'center', padding: '50px' }}>
       <h1>Register</h1>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
       <input
         type="text"
         value={username}

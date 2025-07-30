@@ -1,6 +1,14 @@
 import { Sequelize } from 'sequelize';
+import dotenv from 'dotenv';
 
-const sequelize = new Sequelize(process.env.DATABASE_URL!, {
+// Load environment variables from .env.local
+dotenv.config();
+
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL is not defined in .env.local');
+}
+
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: 'postgres',
   dialectOptions: {
     ssl: {
@@ -9,16 +17,5 @@ const sequelize = new Sequelize(process.env.DATABASE_URL!, {
     },
   },
 });
-
-async function testConnection() {
-  try {
-    await sequelize.authenticate();
-    console.log('Database connected');
-  } catch (error) {
-    console.error('Database connection failed:', error);
-  }
-}
-
-testConnection();
 
 export default sequelize;
