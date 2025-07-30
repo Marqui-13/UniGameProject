@@ -6,7 +6,7 @@ class GameData extends Model {
   public id!: number;
   public user_id!: number;
   public score!: number;
-  public progress!: any;
+  public progress!: object;
   public created_at!: Date;
 }
 

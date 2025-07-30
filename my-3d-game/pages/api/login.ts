@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await User.findOne({ where: { username } });
     if (user && (await bcrypt.compare(password, user.password))) {
       const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, {
-        expiresIn: '1h',
+        expiresIn: '7d',
       });
       res.status(200).json({ token });
     } else {
