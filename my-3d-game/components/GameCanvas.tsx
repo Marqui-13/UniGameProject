@@ -1,179 +1,185 @@
-import { useState, useRef, useEffect } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { useRef, useEffect } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { useGLTF } from '@react-three/drei';
 import axios from 'axios';
 import * as THREE from 'three';
-import { Dispatch, SetStateAction } from 'react';
+import { useRouter } from 'next/router';
+import useGameStore from '../lib/store';
+// Use the public path as a string for the GLB model
+const spaceship = '/models/spaceship.glb';
 
-interface GameCanvasProps {
-  setScore: Dispatch<SetStateAction<number>>;
-}
-
-interface SceneProps {
-  setScore: Dispatch<SetStateAction<number>>;
-}
-
-// Generate random position within bounds
-const getRandomPosition = (): [number, number, number] => {
-  const min = -2;
-  const max = 2;
-  return [
-    Math.random() * (max - min) + min,
-    Math.random() * (max - min) + min,
-    Math.random() * (max - min) + min,
-  ];
+const getRandomLane = () => {
+  const lanes = [-2, 0, 2]; // Three lanes at x = -2, 0, 2
+  return lanes[Math.floor(Math.random() * lanes.length)];
 };
 
-function Scene({ setScore }: SceneProps) {
-  const [collectibles, setCollectibles] = useState([
-    { id: 1, position: getRandomPosition() },
-    { id: 2, position: getRandomPosition() },
-    { id: 3, position: getRandomPosition() },
-  ]);
-  const raycaster = useRef(new THREE.Raycaster());
-  const mouse = useRef(new THREE.Vector2());
-  const { scene, camera, gl } = useThree();
-  const collectibleRefs = useRef<(THREE.Mesh | null)[]>([]);
-  const clickMarkerRef = useRef<THREE.Mesh | null>(null);
+function Scene() {
+  const {
+    level,
+    isGameStarted,
+    lane,
+    gameOver,
+    obstacles,
+    setTime,
+    setGameOver,
+    addObstacle,
+    updateObstacles,
+    moveLane,
+  } = useGameStore();
+  const spaceshipRef = useRef<THREE.Group>(null);
+  const { scene } = useGLTF(spaceship);
+  const obstacleRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const { camera, gl } = useThree();
+  const router = useRouter();
+  const startTimeRef = useRef(0);
 
-  // Rotate central cube
-  useEffect(() => {
-    const cube = scene.getObjectByName('centerCube');
-    const animate = () => {
-      if (cube) cube.rotation.y += 0.01;
-      requestAnimationFrame(animate);
-    };
-    animate();
-  }, [scene]);
-
-  // Handle click to collect cubes
-  const handleClick = (event: MouseEvent) => {
-    event.preventDefault();
-    // Get canvas bounding rect for accurate mouse coords
-    const rect = gl.domElement.getBoundingClientRect();
-    mouse.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    raycaster.current.setFromCamera(mouse.current, camera);
-    raycaster.current.layers.set(0); // Default layer
-    const validRefs = collectibleRefs.current.filter((ref): ref is THREE.Mesh => ref !== null && ref.visible);
-    console.log('Valid refs for raycasting:', validRefs.length, validRefs.map(ref => ref.userData.id));
-    console.log('Camera position:', camera.position);
-    console.log('Mouse coords:', mouse.current.x, mouse.current.y);
-    console.log('Canvas rect:', rect);
-    const intersects = raycaster.current.intersectObjects(validRefs, true);
-
-    // Add click marker
-    if (clickMarkerRef.current) scene.remove(clickMarkerRef.current);
-    const rayEnd = raycaster.current.ray.origin.clone().add(raycaster.current.ray.direction.clone().multiplyScalar(5));
-    const markerGeometry = new THREE.SphereGeometry(0.1, 16, 16);
-    const markerMaterial = new THREE.MeshBasicMaterial({ color: 'yellow' });
-    clickMarkerRef.current = new THREE.Mesh(markerGeometry, markerMaterial);
-    clickMarkerRef.current.position.copy(rayEnd);
-    scene.add(clickMarkerRef.current);
-    setTimeout(() => {
-      if (clickMarkerRef.current) scene.remove(clickMarkerRef.current);
-    }, 500);
-
-    if (intersects.length > 0) {
-      const collectible = intersects[0].object;
-      collectible.visible = false;
-      const newCollectibles = collectibles.filter((c) => c.id !== collectible.userData.id);
-      setCollectibles(newCollectibles);
-      setScore((prevScore) => {
-        const newScore = prevScore + 1;
-        const token = localStorage.getItem('token');
-        if (token) {
-          axios
-            .post(
-              '/api/game',
-              { score: newScore },
-              { headers: { Authorization: `Bearer ${token}` } }
-            )
-            .then(() => console.log('Score saved:', newScore))
-            .catch((error) => console.error('Error saving score:', error.message));
-        } else {
-          console.error('No token found for score update');
-        }
-        return newScore;
-      });
-      console.log('Collectible clicked:', collectible.userData.id, 'New collectibles:', newCollectibles.length);
-      console.log('Intersection point:', intersects[0].point);
-    } else {
-      console.log('No collectibles intersected');
-      console.log('Ray direction:', raycaster.current.ray.direction);
-    }
+  // Level settings
+  const levelSettings = {
+    easy: { speed: 0.05, spawnInterval: 2000 },
+    medium: { speed: 0.08, spawnInterval: 1500 },
+    hard: { speed: 0.12, spawnInterval: 1000 },
   };
 
-  // Attach click handler
-  useEffect(() => {
-    gl.domElement.addEventListener('click', handleClick);
-    return () => gl.domElement.removeEventListener('click', handleClick);
-  }, [gl]);
+  // Hover and tilt effect for spaceship
+  useFrame((state) => {
+    if (spaceshipRef.current) {
+      spaceshipRef.current.position.y = 0.2 + Math.sin(state.clock.getElapsedTime() * 2) * 0.1;
+      spaceshipRef.current.rotation.y = -Math.PI / 2;
+      spaceshipRef.current.position.x = lane;
+      spaceshipRef.current.position.z = 0;
+    }
+  });
 
-  // Debug refs and cube screen positions
+  // Handle keyboard input
   useEffect(() => {
-    const validRefs = collectibleRefs.current.filter((ref): ref is THREE.Mesh => ref !== null && ref.visible);
-    console.log('Collectible refs updated:', collectibleRefs.current.map(ref => ref?.userData.id));
-    console.log('Scene objects:', scene.children.map(obj => obj.name || obj.type));
-    console.log('Cube positions:', collectibles.map(c => c.position));
-    validRefs.forEach(ref => {
-      const vector = new THREE.Vector3();
-      ref.getWorldPosition(vector);
-      vector.project(camera);
-      console.log(`Cube ${ref.userData.id} screen pos:`, vector.x, vector.y);
+    if (!isGameStarted || gameOver) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowLeft') {
+        moveLane('left');
+      } else if (event.key === 'ArrowRight') {
+        moveLane('right');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isGameStarted, gameOver, moveLane]);
+
+  // Spawn obstacles
+  useEffect(() => {
+    if (!isGameStarted || gameOver) return;
+
+    const interval = setInterval(() => {
+      addObstacle({ id: Date.now(), position: [getRandomLane(), 0, -20] });
+    }, levelSettings[level].spawnInterval);
+
+    return () => clearInterval(interval);
+  }, [isGameStarted, gameOver, level, addObstacle]);
+
+  // Move obstacles and check collisions
+  useFrame(() => {
+    if (!isGameStarted || gameOver) return;
+
+    updateObstacles(
+      obstacles
+        .map((obstacle) => ({
+          ...obstacle,
+          position: [
+            obstacle.position[0] as number,
+            0 as number,
+            (obstacle.position[2] as number) + levelSettings[level].speed
+          ] as [number, number, number],
+        }))
+        .filter((obstacle) => obstacle.position[2] < 5)
+    );
+
+    obstacleRefs.current.forEach((ref, index) => {
+      if (ref && spaceshipRef.current) {
+        const obstacleBox = new THREE.Box3().setFromObject(ref);
+        const spaceshipBox = new THREE.Box3().setFromObject(spaceshipRef.current);
+        if (obstacleBox.intersectsBox(spaceshipBox)) {
+          setGameOver(true);
+          const survivalTime = (Date.now() - startTimeRef.current) / 1000;
+          setTime(survivalTime);
+          const token = localStorage.getItem('token');
+          if (token) {
+            axios
+              .post(
+                '/api/game',
+                { level, time: survivalTime },
+                { headers: { Authorization: `Bearer ${token}` } }
+              )
+              .then(() => console.log('Time saved:', survivalTime))
+              .catch((error) => {
+                console.error('Error saving time:', error.message);
+                if (error.response?.status === 401) {
+                  localStorage.removeItem('token');
+                  router.push('/login');
+                }
+              });
+          } else {
+            router.push('/login');
+          }
+        }
+      }
     });
-  }, [collectibles, scene, camera]);
+  });
+
+  // Track time
+  useEffect(() => {
+    if (isGameStarted && !gameOver) {
+      startTimeRef.current = Date.now();
+      const timer = setInterval(() => {
+        setTime((Date.now() - startTimeRef.current) / 1000);
+      }, 100);
+      return () => clearInterval(timer);
+    }
+  }, [isGameStarted, gameOver, setTime]);
+
+  // Camera follows spaceship
+  useFrame(() => {
+    camera.position.set(lane, 2, 5);
+    camera.lookAt(lane, 0, 0);
+  });
 
   return (
     <>
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} />
-      <mesh name="centerCube">
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="blue" />
-      </mesh>
-      {collectibles.map((collectible, index) => (
+      <primitive
+        object={scene}
+        ref={spaceshipRef}
+        position={[lane, 0, 0]}
+        scale={[0.0015, 0.0015, 0.0015]}
+      />
+      {obstacles.map((obstacle, index) => (
         <mesh
-          key={collectible.id}
-          position={collectible.position as [number, number, number]}
-          userData={{ isCollectible: true, id: collectible.id }}
-          ref={(el: THREE.Mesh | null) => {
-            collectibleRefs.current[index] = el;
-            if (el) el.geometry.computeBoundingBox(); // Ensure bounding box for raycasting
-          }}
+          key={obstacle.id}
+          position={obstacle.position as [number, number, number]}
+          ref={(el) => (obstacleRefs.current[index] = el)}
         >
-          <boxGeometry args={[1, 1, 1]} /> {/* Increased size */}
+          <boxGeometry args={[1, 1, 1]} />
           <meshStandardMaterial color="red" />
         </mesh>
       ))}
+      <mesh position={[0, -0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[10, 100]} />
+        <meshStandardMaterial color="gray" />
+      </mesh>
     </>
   );
 }
 
-export default function GameCanvas({ setScore }: GameCanvasProps) {
+export default function GameCanvas() {
   return (
     <div style={{ height: '100vh', position: 'relative' }}>
       <Canvas
-        camera={{ position: [0, 0, 5], fov: 75, near: 0.1, far: 100 }}
+        camera={{ position: [0, 2, 5], fov: 75, near: 0.1, far: 100 }}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
       >
-        <Scene setScore={setScore} />
+        <Scene />
       </Canvas>
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'none',
-          background: 'rgba(0, 0, 0, 0.1)',
-        }}
-      >
-        <p style={{ color: 'white', textAlign: 'center', marginTop: '20px' }}>
-          Click the red cubes to collect them!
-        </p>
-      </div>
     </div>
   );
 }

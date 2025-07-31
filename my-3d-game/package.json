@@ -2,7 +2,7 @@
   "name": "my-3d-game",
   "version": "0.1.0",
   "private": true,
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
@@ -22,7 +22,8 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "sequelize": "^6.37.7",
-    "three": "^0.178.0"
+    "three": "^0.178.0",
+    "zustand": "^5.0.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

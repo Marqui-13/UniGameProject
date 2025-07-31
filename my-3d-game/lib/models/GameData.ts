@@ -1,13 +1,15 @@
-import { DataTypes, Model } from 'sequelize';
+import { Model, DataTypes } from 'sequelize';
 import sequelize from '../db';
 import User from './User';
 
 class GameData extends Model {
   public id!: number;
   public user_id!: number;
-  public score!: number;
+  public level!: string;
+  public time!: number;
   public progress!: object;
-  public created_at!: Date;
+  public createdAt!: Date;
+  public updatedAt!: Date;
 }
 
 GameData.init(
@@ -19,31 +21,46 @@ GameData.init(
     },
     user_id: {
       type: DataTypes.INTEGER,
+      allowNull: false,
       references: {
         model: User,
         key: 'id',
       },
-      allowNull: false,
     },
-    score: {
-      type: DataTypes.INTEGER,
+    level: {
+      type: DataTypes.STRING(10),
+      allowNull: false,
+      validate: {
+        isIn: [['easy', 'medium', 'hard']],
+      },
+    },
+    time: {
+      type: DataTypes.FLOAT,
       allowNull: false,
     },
     progress: {
       type: DataTypes.JSON,
-      allowNull: true,
+      allowNull: false,
     },
-    created_at: {
+    createdAt: {
       type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
+      allowNull: false,
+      field: 'createdAt',
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      field: 'updatedAt',
     },
   },
   {
     sequelize,
     modelName: 'GameData',
     tableName: 'GameData',
-    timestamps: false,
+    timestamps: true,
   }
 );
+
+GameData.belongsTo(User, { foreignKey: 'user_id' });
 
 export default GameData;

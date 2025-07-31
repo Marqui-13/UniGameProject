@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-  import jwt from 'jsonwebtoken';
-  import GameData from '../../lib/models/GameData';
-  import sequelize from '../../lib/db';
+import jwt from 'jsonwebtoken';
+import GameData from '../../lib/models/GameData';
+import sequelize from '../../lib/db';
 
   export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {

@@ -1,11 +1,13 @@
-import { DataTypes, Model } from 'sequelize';
+import { Model, DataTypes } from 'sequelize';
 import sequelize from '../db';
+import GameData from './GameData';
 
 class User extends Model {
   public id!: number;
   public username!: string;
   public password!: string;
-  public created_at!: Date;
+  public createdAt!: Date;
+  public updatedAt!: Date;
 }
 
 User.init(
@@ -16,25 +18,35 @@ User.init(
       primaryKey: true,
     },
     username: {
-      type: DataTypes.STRING(50),
-      unique: true,
+      type: DataTypes.TEXT,
       allowNull: false,
+      unique: true,
     },
     password: {
-      type: DataTypes.STRING(255),
+      type: DataTypes.TEXT,
       allowNull: false,
     },
-    created_at: {
+    createdAt: {
       type: DataTypes.DATE,
+      allowNull: false,
       defaultValue: DataTypes.NOW,
+      field: 'createdAt',
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+      field: 'updatedAt',
     },
   },
   {
     sequelize,
     modelName: 'User',
     tableName: 'Users',
-    timestamps: false,
+    timestamps: true,
   }
 );
+
+User.hasMany(GameData, { foreignKey: 'user_id' });
 
 export default User;
