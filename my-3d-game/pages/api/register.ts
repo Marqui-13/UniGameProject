@@ -1,36 +1,74 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import bcrypt from 'bcrypt';
-import User from '../../lib/models/User';
+import jwt from 'jsonwebtoken';
+import { User } from '../../lib/models';
 import sequelize from '../../lib/db';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  console.log('Register API called', {
+    method: req.method,
+    headers: req.headers,
+    body: req.body,
+    url: req.url,
+    timestamp: new Date().toISOString(),
+  });
+
+  if (req.method !== 'POST') {
+    console.log('Method not allowed:', req.method);
+    return res.status(405).json({ error: `Method ${req.method} not allowed` });
+  }
 
   const { username, password } = req.body;
 
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password are required' });
-  }
-  if (username.length < 3 || username.length > 50) {
-    return res.status(400).json({ error: 'Username must be between 3 and 50 characters' });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (!username || !password || typeof username !== 'string' || typeof password !== 'string') {
+    console.log('Invalid input:', { username, password });
+    return res.status(400).json({ error: 'Username and password must be non-empty strings' });
   }
 
   try {
-    await sequelize.authenticate(); // Verify DB connection
+    console.log('Attempting to authenticate database');
+    await sequelize.authenticate();
+    console.log('Database connection successful');
+
+    const existingUser = await User.findOne({ where: { username } });
+    if (existingUser) {
+      console.log('User already exists:', username);
+      return res.status(400).json({ error: 'Username already taken' });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
-    await User.create({ username, password: hashedPassword });
-    res.status(201).json({ message: 'User created successfully' });
+    console.log('Password hashed:', { username, hashedPassword: hashedPassword.slice(0, 10) + '...' });
+
+    const user = await User.create({ username, password: hashedPassword });
+    console.log('User created:', { id: user.id, username, passwordStored: hashedPassword.slice(0, 10) + '...' });
+
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET not set');
+      return res.status(500).json({ error: 'Server configuration error: JWT_SECRET not set' });
+    }
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
+      expiresIn: '1h',
+    });
+    console.log('Token generated:', { userId: user.id, token: token.slice(0, 10) + '...' });
+
+    res.status(201).json({ token });
   } catch (error: any) {
-    console.error('Registration error:', error.name, error.message, error.stack);
+    console.error('Register API error:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      details: error,
+      username,
+      databaseUrl: process.env.DATABASE_URL ? 'Set' : 'Not set',
+      jwtSecret: process.env.JWT_SECRET ? 'Set' : 'Not set',
+      timestamp: new Date().toISOString(),
+    });
     if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.status(409).json({ error: 'Username already exists' });
+      return res.status(400).json({ error: 'Username already taken' });
     }
     if (error.name === 'SequelizeDatabaseError') {
-      return res.status(500).json({ error: 'Database connection error' });
+      return res.status(500).json({ error: 'Database error', details: error.message });
     }
-    return res.status(500).json({ error: 'Server error during registration' });
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 }

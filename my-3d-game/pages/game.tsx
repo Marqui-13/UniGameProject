@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import useGameStore from '../lib/store';
@@ -18,6 +17,7 @@ export default function Game() {
     setLeaderboard,
   } = useGameStore();
   const [isClient, setIsClient] = useState(false);
+  const [error, setError] = useState('');
   const router = useRouter();
 
   const fetchLeaderboard = async () => {
@@ -25,20 +25,36 @@ export default function Game() {
       const token = localStorage.getItem('token');
       if (!token) {
         console.error('No token found for leaderboard');
+        setError('Please log in to view the leaderboard');
         router.push('/login');
         return;
       }
-      const response = await axios.get('/api/leaderboard', {
-        headers: { Authorization: `Bearer ${token}` },
+
+      const response = await fetch('/api/leaderboard', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       });
-      setLeaderboard(response.data);
-      console.log('Leaderboard fetched:', response.data);
-    } catch (error: any) {
-      console.error('Failed to fetch leaderboard:', error);
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        router.push('/login');
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError('Session expired. Please log in again.');
+          localStorage.removeItem('token');
+          router.push('/login');
+          return;
+        }
+        throw new Error(`HTTP error! Status: ${response.status}`);
       }
+
+      const data = await response.json();
+      setLeaderboard(data);
+      console.log('Leaderboard fetched:', data);
+      setError('');
+    } catch (error: any) {
+      console.error('Failed to fetch leaderboard:', error.message);
+      setError('Failed to load leaderboard. Please try again.');
     }
   };
 
@@ -53,7 +69,7 @@ export default function Game() {
 
   return (
     <div style={{ textAlign: 'center', position: 'relative' }}>
-      <h1>3D Spaceship Game</h1>
+      <h1>3D Spaceship Runner Game</h1>
       <h2>Survival Time: {time.toFixed(2)}s</h2>
       <div>
         <label>Select Level: </label>
@@ -74,6 +90,7 @@ export default function Game() {
         Start Game
       </button>
       <h3>Leaderboard</h3>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
       {isClient ? (
         <>
           <button style={{ margin: '10px', padding: '10px 20px', fontSize: '16px' }} onClick={fetchLeaderboard}>
@@ -84,7 +101,7 @@ export default function Game() {
             <ul style={{ listStyle: 'none' }}>
               {leaderboard.easy.map((entry: any) => (
                 <li key={entry.id}>
-                  {entry.User.username}: {entry.time.toFixed(2)}s
+                  {entry.User?.username || 'Unknown'}: {entry.time.toFixed(2)}s
                 </li>
               ))}
             </ul>
@@ -92,7 +109,7 @@ export default function Game() {
             <ul style={{ listStyle: 'none' }}>
               {leaderboard.medium.map((entry: any) => (
                 <li key={entry.id}>
-                  {entry.User.username}: {entry.time.toFixed(2)}s
+                  {entry.User?.username || 'Unknown'}: {entry.time.toFixed(2)}s
                 </li>
               ))}
             </ul>
@@ -100,7 +117,7 @@ export default function Game() {
             <ul style={{ listStyle: 'none' }}>
               {leaderboard.hard.map((entry: any) => (
                 <li key={entry.id}>
-                  {entry.User.username}: {entry.time.toFixed(2)}s
+                  {entry.User?.username || 'Unknown'}: {entry.time.toFixed(2)}s
                 </li>
               ))}
             </ul>
