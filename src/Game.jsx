@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
+import { useRef, useEffect, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Canvas, useFrame, useThree, extend } from '@react-three/fiber';
 import { useGLTF, shaderMaterial } from '@react-three/drei';
 import * as THREE from 'three';
@@ -10,9 +10,7 @@ const getRandomLane = () => {
   return lanes[Math.floor(Math.random() * lanes.length)];
 };
 
-/* ============================
-   Quantum Cube (shader collectible)
-   ============================ */
+// Quantum Cube (shader collectible)
 
 // Vertex + Fragment shaders (simple wave + color pulse)
 const vertexShader = `
@@ -87,9 +85,123 @@ const QuantumCube = forwardRef(function QuantumCube({ position = [0, -10, 0] }, 
   );
 });
 
-/* ============================
-   Main Scene
-   ============================ */
+// STARS SHADERS
+const StarVertexShader = `
+  attribute float size;
+  attribute vec3 customColor;
+  varying vec3 vColor;
+
+  uniform float time;
+
+  float rand(vec2 co){
+    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+  }
+
+  void main() {
+      vColor = customColor;
+
+      vec3 pos = position;
+
+      float r1 = rand(position.xy);
+      float r2 = rand(position.yz);
+      float r3 = rand(position.zx);
+
+      // pos.x += sin(time * (1.0 + r1 * 2.0) + pos.y * (2.0 + r1)) * 0.5;
+      // pos.y += cos(time * (1.0 + r2 * 2.0) + pos.x * (2.0 + r2)) * 0.5;
+      // pos.z += sin(time * (1.0 + r3 * 2.0) + pos.z * (2.0 + r3)) * 0.5;
+
+      vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+
+      gl_PointSize = size * (300.0 / -mvPosition.z);
+      gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+
+const StarFragmentShader = `
+  uniform sampler2D pointTexture;
+  varying vec3 vColor;
+
+  void main() {
+    float d = 2.0 * distance(gl_PointCoord, vec2(0.5, 0.5));
+    float alpha = 1.0 - d;
+    alpha = alpha * alpha; // Glow
+    gl_FragColor = vec4(vColor * alpha, alpha);
+    if (d > 1.0) discard;
+  }
+`;
+
+// STAR FIELD COMPONENT
+function StarField({ count = 2000 }) {
+  const points = useMemo(() => {
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+
+    const color = new THREE.Color();
+
+    for (let i = 0; i < count; i++) {
+      positions[i * 3 + 0] = (Math.random() - 0.5) * 200; // x
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 200; // y
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 200; // z
+
+      color.setHSL(Math.random(), 0.7, 0.7);
+      colors[i * 3 + 0] = color.r;
+      colors[i * 3 + 1] = color.g;
+      colors[i * 3 + 2] = color.b;
+
+      sizes[i] = Math.random() * 5 + 1;
+    }
+
+    return { positions, colors, sizes };
+  }, [count]);
+
+  const materialRef = useRef(null);
+
+  useFrame(({ clock }) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.time.value = clock.getElapsedTime();
+    }
+  });
+
+  return (
+    <points>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          array={points.positions}
+          count={points.positions.length / 3}
+          itemSize={3}
+        />
+        <bufferAttribute
+          attach="attributes-customColor"
+          array={points.colors}
+          count={points.colors.length / 3}
+          itemSize={3}
+        />
+        <bufferAttribute
+          attach="attributes-size"
+          array={points.sizes}
+          count={points.sizes.length}
+          itemSize={1}
+        />
+      </bufferGeometry>
+      <shaderMaterial
+        ref={materialRef}
+        vertexShader={StarVertexShader}
+        fragmentShader={StarFragmentShader}
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+        transparent
+        uniforms={{
+          time: { value: 0 },
+          pointTexture: { value: new THREE.TextureLoader().load("/models/whitecircle.png") }, // tiny white dot texture
+        }}
+      />
+    </points>
+  );
+}
+
+// Main Scene
 
 function Scene({
   session,
@@ -125,7 +237,7 @@ function Scene({
     hard: { speed: 0.15, spawnInterval: 1000 },
   };
 
-  // Hovering ship motion + fixed rotation/position per lane
+  // Hovering ship motion
   useFrame((state) => {
     if (spaceshipRef.current) {
       spaceshipRef.current.position.y =
@@ -158,13 +270,13 @@ function Scene({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isGameStarted, gameOver, invalidate]);
 
-  // Spawn obstacles & collectibles (never same lane)
+  // Spawn obstacles & collectibles
   useEffect(() => {
     if (!isGameStarted || gameOver) return;
 
     const spawnInterval = setInterval(() => {
       const lanes = [-2, 0, 2];
-      // Shuffle lanes quickly
+      // Shuffle lanes
       const shuffled = lanes.sort(() => 0.5 - Math.random());
 
       const newObstacle = { id: Date.now(), position: [shuffled[0], 0, -20] };
@@ -342,9 +454,7 @@ function Scene({
   );
 }
 
-/* ============================
-   Page Wrapper
-   ============================ */
+// Page Wrapper
 
 export default function GamePage({ session }) {
   const [isGameStarted, setIsGameStarted] = useState(false);
@@ -372,7 +482,6 @@ export default function GamePage({ session }) {
     setResetGame(true);
     setIsGameStarted(true);
     setGameOver(false);
-    // allow effects to see resetGame true
     setTimeout(() => setResetGame(false), 50);
 
     const elem = document.documentElement;
@@ -469,6 +578,7 @@ export default function GamePage({ session }) {
               score={score}
               setScore={setScore}
             />
+            <StarField />
           </Canvas>
         </div>
       ) : (
